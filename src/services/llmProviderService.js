@@ -100,6 +100,7 @@ async function sendMessage({
   userPrompt,
   context,
   maxTokens = 4096,
+  responseMimeType,
 }) {
   const normalizedProvider = normalizeProvider(provider);
   const selectedModel = model || defaultModel(normalizedProvider);
@@ -181,6 +182,7 @@ async function sendMessage({
         userPrompt,
         context,
         maxTokens,
+        responseMimeType,
       });
     case "anthropic":
       return callAnthropic({
@@ -236,6 +238,7 @@ async function callGemini({
   userPrompt,
   context,
   maxTokens,
+  responseMimeType,
 }) {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
@@ -246,7 +249,11 @@ async function callGemini({
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: systemPrompt }] },
       contents: [{ parts: [{ text: buildUserContent(userPrompt, context) }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: maxTokens,
+        ...(responseMimeType ? { responseMimeType } : {}),
+      },
     }),
   });
   const data = await readJsonResponse(response, "gemini");

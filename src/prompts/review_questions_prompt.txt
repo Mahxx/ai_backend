@@ -11,12 +11,14 @@ Regles obligatoires:
 - Chaque question doit avoir 5 propositions A, B, C, D, E.
 - Les questions peuvent etre QCM si une seule reponse est vraie ou QRM si plusieurs reponses sont vraies.
 - Pour chaque question, indique clairement les bonnes reponses.
-- Donne une explication courte mais precise pour chaque question.
-- Indique la partie du cours ou le concept utilise.
+- Donne une explication courte mais precise pour chaque question: 1 a 2 phrases maximum.
+- Indique la partie du cours ou le concept utilise en quelques mots.
+- Garde chaque proposition concise.
 - N'invente pas d'informations absentes du cours. Si le cours est insuffisant, signale-le et reduis le nombre de questions.
 
 Format de sortie obligatoire:
 Retourne uniquement un JSON valide. N'ajoute aucun texte avant ou apres le JSON. N'utilise pas de bloc markdown.
+Le JSON doit etre directement parsable par JSON.parse.
 
 Schema exact:
 {

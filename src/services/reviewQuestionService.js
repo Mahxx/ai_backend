@@ -64,7 +64,8 @@ async function generateReviewQuestions({
         selectedChunks: courses.selectedChunks,
       }),
       context: courses.context,
-      maxTokens: Math.min(4096, Math.max(1400, count * 650)),
+      maxTokens: Math.min(12000, Math.max(2200, count * 850)),
+      responseMimeType: "application/json",
     });
     const questions = parseGeneratedQuestions(answer, count);
 
@@ -134,8 +135,9 @@ function normalizeQuestion(item, index) {
   const text = String(item?.text || "").trim();
   if (!text) return null;
 
-  const choices = Array.isArray(item?.choices)
-    ? item.choices
+  const rawChoices = normalizeChoicesInput(item?.choices);
+  const choices = Array.isArray(rawChoices)
+    ? rawChoices
         .map((choice) => ({
           label: String(choice?.label || "").trim().toUpperCase(),
           text: String(choice?.text || "").trim(),
@@ -148,8 +150,11 @@ function normalizeQuestion(item, index) {
     .filter(Boolean);
   if (uniqueChoices.length !== 5) return null;
 
-  const correctAnswers = Array.isArray(item?.correctAnswers)
-    ? item.correctAnswers
+  const rawCorrectAnswers = normalizeCorrectAnswersInput(
+    item?.correctAnswers || item?.answer || item?.answers
+  );
+  const correctAnswers = Array.isArray(rawCorrectAnswers)
+    ? rawCorrectAnswers
         .map((label) => String(label).trim().toUpperCase())
         .filter((label) => labels.includes(label))
     : [];
@@ -166,6 +171,24 @@ function normalizeQuestion(item, index) {
     trap: String(item?.trap || "").trim(),
     source: String(item?.source || "").trim(),
   };
+}
+
+function normalizeChoicesInput(value) {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return [];
+  return ["A", "B", "C", "D", "E"].map((label) => ({
+    label,
+    text: value[label] || value[label.toLowerCase()] || "",
+  }));
+}
+
+function normalizeCorrectAnswersInput(value) {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== "string") return [];
+  return value
+    .split(/[,;|\s]+/)
+    .map((label) => label.trim())
+    .filter(Boolean);
 }
 
 function validateInput({ userId, moduleId, provider }) {
