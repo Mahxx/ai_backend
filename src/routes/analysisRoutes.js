@@ -1,6 +1,7 @@
 const express = require("express");
 const { upload } = require("../services/uploadService");
 const { analyzeSubject } = require("../services/analysisService");
+const { generateReviewQuestions } = require("../services/reviewQuestionService");
 
 const router = express.Router();
 
@@ -30,6 +31,26 @@ router.post(
     }
   }
 );
+
+router.post("/generate-review-questions", async (req, res, next) => {
+  try {
+    const result = await generateReviewQuestions({
+      userId: req.body.userId,
+      email: req.body.email,
+      fullName: req.body.fullName,
+      studyYear: req.body.studyYear,
+      moduleId: req.body.moduleId,
+      questionCount: req.body.questionCount,
+      provider: req.body.provider,
+      model: req.body.model,
+      reservedBackendId: req.body.reservedBackendId,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
 
 function parseJsonArray(value) {
   if (!value) return [];
