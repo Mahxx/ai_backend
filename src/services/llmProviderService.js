@@ -37,6 +37,24 @@ function defaultModel(provider) {
   return PROVIDER_DEFAULTS[normalizeProvider(provider)]?.model || "";
 }
 
+function enabledProviderIds() {
+  const configured = process.env.ENABLED_AI_PROVIDERS || "gemini";
+  return configured
+    .split(",")
+    .map((provider) => normalizeProvider(provider))
+    .filter((provider) => PROVIDER_DEFAULTS[provider]);
+}
+
+function enabledProviderOptions() {
+  const links = providerLinks();
+  return enabledProviderIds().map((id) => ({
+    id,
+    label: PROVIDER_DEFAULTS[id].label,
+    defaultModel: PROVIDER_DEFAULTS[id].model,
+    keyUrl: links[id],
+  }));
+}
+
 function providerLinks() {
   return {
     openai: "https://platform.openai.com/api-keys",
@@ -72,6 +90,12 @@ async function sendMessage({
   const normalizedProvider = normalizeProvider(provider);
   const selectedModel = model || defaultModel(normalizedProvider);
 
+  if (!enabledProviderIds().includes(normalizedProvider)) {
+    throw httpError(
+      400,
+      "Ce fournisseur IA est desactive. Utilisez Gemini pour le mode gratuit."
+    );
+  }
   if (!apiKey) {
     throw httpError(400, "Cle API manquante.");
   }
@@ -295,6 +319,8 @@ function providerLabel(provider) {
 module.exports = {
   PROVIDER_DEFAULTS,
   defaultModel,
+  enabledProviderIds,
+  enabledProviderOptions,
   normalizeProvider,
   providerLinks,
   sendMessage,

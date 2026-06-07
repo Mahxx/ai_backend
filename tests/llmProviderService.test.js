@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 
 const {
   defaultModel,
+  enabledProviderIds,
   normalizeProvider,
 } = require("../src/services/llmProviderService");
 
@@ -12,4 +13,9 @@ test("normalizeProvider maps claude to anthropic", () => {
 
 test("defaultModel returns provider default", () => {
   assert.equal(defaultModel("deepseek"), "deepseek-v4-flash");
+});
+
+test("enabledProviderIds defaults to Gemini only", () => {
+  delete process.env.ENABLED_AI_PROVIDERS;
+  assert.deepEqual(enabledProviderIds(), ["gemini"]);
 });

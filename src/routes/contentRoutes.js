@@ -3,7 +3,7 @@ const {
   listCourses,
   listModules,
 } = require("../services/courseRetrievalService");
-const { providerLinks, PROVIDER_DEFAULTS } = require("../services/llmProviderService");
+const { enabledProviderOptions } = require("../services/llmProviderService");
 
 const router = express.Router();
 
@@ -25,12 +25,7 @@ router.get("/modules/:moduleId/courses", async (req, res, next) => {
 
 router.get("/providers", (req, res) => {
   res.json({
-    providers: Object.entries(PROVIDER_DEFAULTS).map(([id, data]) => ({
-      id,
-      label: data.label,
-      defaultModel: data.model,
-      keyUrl: providerLinks()[id],
-    })),
+    providers: enabledProviderOptions(),
   });
 });
 
