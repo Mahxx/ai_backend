@@ -66,6 +66,7 @@ async function generateReviewQuestions({
       context: courses.context,
       maxTokens: Math.min(12000, Math.max(2200, count * 850)),
       responseMimeType: "application/json",
+      responseJsonSchema: reviewQuestionsSchema(),
     });
     const questions = parseGeneratedQuestions(answer, count);
 
@@ -87,6 +88,57 @@ async function generateReviewQuestions({
       await releaseBackend(backendIdToRelease, success, countBackendUsage);
     }
   }
+}
+
+function reviewQuestionsSchema() {
+  return {
+    type: "object",
+    properties: {
+      questions: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            id: { type: "string" },
+            type: { type: "string", enum: ["QCM", "QRM"] },
+            text: { type: "string" },
+            choices: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+                  text: { type: "string" },
+                },
+                required: ["label", "text"],
+              },
+              minItems: 5,
+              maxItems: 5,
+            },
+            correctAnswers: {
+              type: "array",
+              items: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+              minItems: 1,
+            },
+            explanation: { type: "string" },
+            trap: { type: "string" },
+            source: { type: "string" },
+          },
+          required: [
+            "id",
+            "type",
+            "text",
+            "choices",
+            "correctAnswers",
+            "explanation",
+            "trap",
+            "source",
+          ],
+        },
+      },
+    },
+    required: ["questions"],
+  };
 }
 
 function parseGeneratedQuestions(answer, requestedCount) {

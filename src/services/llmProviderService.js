@@ -101,6 +101,7 @@ async function sendMessage({
   context,
   maxTokens = 4096,
   responseMimeType,
+  responseJsonSchema,
 }) {
   const normalizedProvider = normalizeProvider(provider);
   const selectedModel = model || defaultModel(normalizedProvider);
@@ -183,6 +184,7 @@ async function sendMessage({
         context,
         maxTokens,
         responseMimeType,
+        responseJsonSchema,
       });
     case "anthropic":
       return callAnthropic({
@@ -239,6 +241,7 @@ async function callGemini({
   context,
   maxTokens,
   responseMimeType,
+  responseJsonSchema,
 }) {
   const url =
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` +
@@ -253,6 +256,7 @@ async function callGemini({
         temperature: 0.2,
         maxOutputTokens: maxTokens,
         ...(responseMimeType ? { responseMimeType } : {}),
+        ...(responseJsonSchema ? { responseJsonSchema } : {}),
       },
     }),
   });
