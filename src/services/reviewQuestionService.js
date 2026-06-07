@@ -179,8 +179,188 @@ async function tryGenerateWithProvider({
     });
     throw error;
   }
+  if (questions.length < count) {
+    questions = await completeMissingQuestions({
+      provider,
+      apiKey,
+      model,
+      studyYear,
+      moduleId,
+      courses,
+      questions,
+      targetCount: count,
+    });
+    answer = JSON.stringify({ questions });
+  }
 
   return { answer, questions, provider, model };
+}
+
+async function completeMissingQuestions({
+  provider,
+  apiKey,
+  model,
+  studyYear,
+  moduleId,
+  courses,
+  questions,
+  targetCount,
+}) {
+  const completed = [...questions];
+  let attempts = 0;
+
+  while (completed.length < targetCount && attempts < targetCount) {
+    attempts++;
+    const questionIndex = completed.length;
+    const answer = await sendMessage({
+      provider,
+      apiKey,
+      model,
+      systemPrompt: getSingleReviewQuestionPrompt(),
+      userPrompt: `${buildReviewQuestionsUserPrompt({
+        studyYear,
+        moduleId,
+        questionCount: 1,
+        selectedChunks: courses.selectedChunks,
+      })}
+
+Questions deja generees a ne pas repeter:
+${completed.map((question) => `- ${question.text}`).join("\n")}
+
+Genere uniquement la question numero ${questionIndex + 1}.
+Retourne uniquement un objet JSON d'une seule question.`,
+      context: courses.context,
+      maxTokens: 1800,
+      responseMimeType: "application/json",
+      responseJsonSchema: singleQuestionSchema(),
+    });
+
+    try {
+      const question = parseSingleQuestion(answer, questionIndex);
+      if (!isDuplicateQuestion(completed, question)) {
+        completed.push(question);
+      }
+    } catch (error) {
+      logInvalidGeneration({
+        error,
+        provider,
+        model,
+        answer,
+      });
+    }
+  }
+
+  if (completed.length < targetCount) {
+    console.warn("generated_questions_incomplete", {
+      provider,
+      model,
+      requested: targetCount,
+      generated: completed.length,
+    });
+  }
+
+  return completed.slice(0, targetCount).map((question, index) => ({
+    ...question,
+    id: `q${index + 1}`,
+  }));
+}
+
+function parseSingleQuestion(answer, index) {
+  const parsed = parseJsonWithLightRepair(extractJson(answer));
+  const rawQuestion = Array.isArray(parsed?.questions)
+    ? parsed.questions[0]
+    : parsed?.question || parsed;
+  const question = normalizeQuestion(rawQuestion, index);
+  if (!question) {
+    throw new Error("Question individuelle invalide.");
+  }
+  return question;
+}
+
+function isDuplicateQuestion(questions, candidate) {
+  const normalizedText = normalizeQuestionText(candidate.text);
+  return questions.some(
+    (question) => normalizeQuestionText(question.text) === normalizedText
+  );
+}
+
+function normalizeQuestionText(value) {
+  return value.toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function getSingleReviewQuestionPrompt() {
+  return `Tu es un expert en pedagogie medicale et en docimologie.
+
+Genere une seule question de revision tres difficile a partir du cours fourni.
+
+Regles obligatoires:
+- Utilise uniquement les informations soutenues par le cours.
+- La question doit avoir exactement 5 propositions A, B, C, D, E.
+- Varie entre QCM et QRM.
+- Type "QCM": une seule bonne reponse.
+- Type "QRM": 2 ou 3 bonnes reponses.
+- L'explication doit etre courte: 1 a 2 phrases.
+- Retourne uniquement un JSON valide, sans markdown, sans texte avant ou apres.
+
+Schema:
+{
+  "id": "q1",
+  "type": "QCM",
+  "text": "Enonce",
+  "choices": [
+    {"label": "A", "text": "Proposition A"},
+    {"label": "B", "text": "Proposition B"},
+    {"label": "C", "text": "Proposition C"},
+    {"label": "D", "text": "Proposition D"},
+    {"label": "E", "text": "Proposition E"}
+  ],
+  "correctAnswers": ["A"],
+  "explanation": "Explication courte.",
+  "trap": "Piege teste.",
+  "source": "Concept du cours."
+}`;
+}
+
+function singleQuestionSchema() {
+  return {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      type: { type: "string", enum: ["QCM", "QRM"] },
+      text: { type: "string" },
+      choices: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+            text: { type: "string" },
+          },
+          required: ["label", "text"],
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+      correctAnswers: {
+        type: "array",
+        items: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+        minItems: 1,
+      },
+      explanation: { type: "string" },
+      trap: { type: "string" },
+      source: { type: "string" },
+    },
+    required: [
+      "id",
+      "type",
+      "text",
+      "choices",
+      "correctAnswers",
+      "explanation",
+      "trap",
+      "source",
+    ],
+  };
 }
 
 function fallbackProviders(primaryProvider) {
