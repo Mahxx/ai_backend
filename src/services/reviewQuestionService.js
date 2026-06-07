@@ -36,6 +36,7 @@ async function generateReviewQuestions({
       userId,
       provider: normalizedProvider,
     });
+    const selectedModel = model || key.model;
     const quota = await consumeUserDailyQuota(userId);
     const selectionText = [
       studyYear ? `Annee d'etude: ${studyYear}` : "",
@@ -52,53 +53,23 @@ async function generateReviewQuestions({
     });
 
     countBackendUsage = true;
-    let answer = await sendMessage({
-      provider: normalizedProvider,
-      apiKey: key.apiKey,
-      model: model || key.model,
-      systemPrompt: getReviewQuestionsPrompt(),
-      userPrompt: buildReviewQuestionsUserPrompt({
-        studyYear,
-        moduleId,
-        questionCount: count,
-        selectedChunks: courses.selectedChunks,
-      }),
-      context: courses.context,
-      maxTokens: Math.min(12000, Math.max(2200, count * 850)),
-      responseMimeType: "application/json",
-      responseJsonSchema: reviewQuestionsSchema(),
+    const generation = await generateQuestionsWithFallback({
+      userId,
+      primaryProvider: normalizedProvider,
+      primaryApiKey: key.apiKey,
+      primaryModel: selectedModel,
+      studyYear,
+      moduleId,
+      courses,
+      count,
     });
-    let questions;
-    try {
-      questions = parseGeneratedQuestions(answer, count);
-    } catch (error) {
-      logInvalidGeneration({
-        error,
-        provider: normalizedProvider,
-        model: model || key.model,
-        answer,
-      });
-      if (normalizedProvider !== "gemini") {
-        throw error;
-      }
-
-      questions = await generateGeminiQuestionsOneByOne({
-        apiKey: key.apiKey,
-        model: model || key.model,
-        studyYear,
-        moduleId,
-        courses,
-        count: Math.min(count, 5),
-      });
-      answer = JSON.stringify({ questions });
-    }
 
     success = true;
     return {
-      answer,
-      questions,
-      provider: normalizedProvider,
-      model: model || key.model,
+      answer: generation.answer,
+      questions: generation.questions,
+      provider: generation.provider,
+      model: generation.model,
       quota,
       selectedChunks: courses.selectedChunks,
       stats: {
@@ -111,6 +82,125 @@ async function generateReviewQuestions({
       await releaseBackend(backendIdToRelease, success, countBackendUsage);
     }
   }
+}
+
+async function generateQuestionsWithFallback({
+  userId,
+  primaryProvider,
+  primaryApiKey,
+  primaryModel,
+  studyYear,
+  moduleId,
+  courses,
+  count,
+}) {
+  const originalError = await tryGenerateWithProvider({
+    provider: primaryProvider,
+    apiKey: primaryApiKey,
+    model: primaryModel,
+    studyYear,
+    moduleId,
+    courses,
+    count,
+  }).catch((error) => error);
+
+  if (!isError(originalError)) {
+    return originalError;
+  }
+
+  console.warn("generated_questions_primary_failed", {
+    provider: primaryProvider,
+    model: primaryModel,
+    message: originalError.message,
+  });
+
+  for (const fallbackProvider of fallbackProviders(primaryProvider)) {
+    try {
+      const key = await getDecryptedApiKey({
+        userId,
+        provider: fallbackProvider,
+      });
+      return await tryGenerateWithProvider({
+        provider: fallbackProvider,
+        apiKey: key.apiKey,
+        model: key.model,
+        studyYear,
+        moduleId,
+        courses,
+        count,
+      });
+    } catch (error) {
+      console.warn("generated_questions_fallback_failed", {
+        provider: fallbackProvider,
+        message: error.message,
+      });
+    }
+  }
+
+  throw originalError;
+}
+
+async function tryGenerateWithProvider({
+  provider,
+  apiKey,
+  model,
+  studyYear,
+  moduleId,
+  courses,
+  count,
+}) {
+  let answer = await sendMessage({
+    provider,
+    apiKey,
+    model,
+    systemPrompt: getReviewQuestionsPrompt(),
+    userPrompt: buildReviewQuestionsUserPrompt({
+      studyYear,
+      moduleId,
+      questionCount: count,
+      selectedChunks: courses.selectedChunks,
+    }),
+    context: courses.context,
+    maxTokens: Math.min(12000, Math.max(2200, count * 850)),
+    responseMimeType: "application/json",
+    responseJsonSchema: reviewQuestionsSchema(),
+  });
+  let questions;
+  try {
+    questions = parseGeneratedQuestions(answer, count);
+  } catch (error) {
+    logInvalidGeneration({
+      error,
+      provider,
+      model,
+      answer,
+    });
+    if (provider !== "gemini") {
+      throw error;
+    }
+
+    questions = await generateGeminiQuestionsOneByOne({
+      apiKey,
+      model,
+      studyYear,
+      moduleId,
+      courses,
+      count: Math.min(count, 5),
+    });
+    answer = JSON.stringify({ questions });
+  }
+
+  return { answer, questions, provider, model };
+}
+
+function fallbackProviders(primaryProvider) {
+  return ["groqcloud", "openrouter", "gemini"].filter(
+    (provider) => provider !== primaryProvider
+  );
+}
+
+function isError(value) {
+  return value instanceof Error;
 }
 
 async function generateGeminiQuestionsOneByOne({
