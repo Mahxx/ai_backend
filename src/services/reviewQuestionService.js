@@ -11,6 +11,8 @@ const { consumeUserDailyQuota } = require("./quotaService");
 const { releaseBackend } = require("./routingService");
 const { ensureUser } = require("./userService");
 
+const REVIEW_QUESTION_PROVIDERS = ["groqcloud", "openrouter"];
+
 async function generateReviewQuestions({
   userId,
   email,
@@ -31,7 +33,7 @@ async function generateReviewQuestions({
     validateInput({ userId, moduleId, provider });
     await ensureUser({ userId, email, fullName });
 
-    const normalizedProvider = normalizeProvider(provider);
+    const normalizedProvider = normalizeReviewQuestionProvider(provider);
     const key = await getDecryptedApiKey({
       userId,
       provider: normalizedProvider,
@@ -175,172 +177,20 @@ async function tryGenerateWithProvider({
       model,
       answer,
     });
-    if (provider !== "gemini") {
-      throw error;
-    }
-
-    questions = await generateGeminiQuestionsOneByOne({
-      apiKey,
-      model,
-      studyYear,
-      moduleId,
-      courses,
-      count: Math.min(count, 5),
-    });
-    answer = JSON.stringify({ questions });
+    throw error;
   }
 
   return { answer, questions, provider, model };
 }
 
 function fallbackProviders(primaryProvider) {
-  return ["groqcloud", "openrouter", "gemini"].filter(
+  return REVIEW_QUESTION_PROVIDERS.filter(
     (provider) => provider !== primaryProvider
   );
 }
 
 function isError(value) {
   return value instanceof Error;
-}
-
-async function generateGeminiQuestionsOneByOne({
-  apiKey,
-  model,
-  studyYear,
-  moduleId,
-  courses,
-  count,
-}) {
-  const questions = [];
-  for (let index = 0; index < count; index++) {
-    const answer = await sendMessage({
-      provider: "gemini",
-      apiKey,
-      model,
-      systemPrompt: getSingleQuestionPrompt(),
-      userPrompt: `${buildReviewQuestionsUserPrompt({
-        studyYear,
-        moduleId,
-        questionCount: 1,
-        selectedChunks: courses.selectedChunks,
-      })}
-
-Genere seulement la question numero ${index + 1}.
-Evite de repeter les questions precedentes.
-Retourne uniquement l'objet JSON d'une seule question, pas un tableau.`,
-      context: courses.context,
-      maxTokens: 2200,
-      responseMimeType: "application/json",
-      responseJsonSchema: singleQuestionSchema(),
-    });
-
-    try {
-      const question = parseSingleQuestion(answer, index);
-      questions.push(question);
-    } catch (error) {
-      logInvalidGeneration({
-        error,
-        provider: "gemini",
-        model,
-        answer,
-      });
-    }
-  }
-
-  if (questions.length === 0) {
-    throw httpError(
-      502,
-      "Generation IA invalide. Reessayez avec GroqCloud ou OpenRouter."
-    );
-  }
-
-  return questions;
-}
-
-function parseSingleQuestion(answer, index) {
-  const parsed = parseJsonWithLightRepair(extractJson(answer));
-  const rawQuestion = Array.isArray(parsed?.questions)
-    ? parsed.questions[0]
-    : parsed?.question || parsed;
-  const question = normalizeQuestion(rawQuestion, index);
-  if (!question) {
-    throw new Error("Question individuelle Gemini invalide.");
-  }
-  return question;
-}
-
-function getSingleQuestionPrompt() {
-  return `Tu es un expert en pedagogie medicale et en docimologie.
-
-Ta mission est de generer une seule question de revision tres difficile a partir du cours fourni.
-
-Regles:
-- Utilise uniquement les informations soutenues par le cours.
-- La question doit avoir exactement 5 propositions A, B, C, D, E.
-- Une seule bonne reponse donne un type "QCM".
-- Plusieurs bonnes reponses donnent un type "QRM".
-- L'explication doit etre courte: 1 a 2 phrases.
-- Retourne uniquement un JSON valide, sans markdown, sans texte avant ou apres.
-
-Schema:
-{
-  "id": "q1",
-  "type": "QCM",
-  "text": "Enonce",
-  "choices": [
-    {"label": "A", "text": "Proposition A"},
-    {"label": "B", "text": "Proposition B"},
-    {"label": "C", "text": "Proposition C"},
-    {"label": "D", "text": "Proposition D"},
-    {"label": "E", "text": "Proposition E"}
-  ],
-  "correctAnswers": ["A"],
-  "explanation": "Explication courte.",
-  "trap": "Piege teste.",
-  "source": "Concept du cours."
-}`;
-}
-
-function singleQuestionSchema() {
-  return {
-    type: "object",
-    properties: {
-      id: { type: "string" },
-      type: { type: "string", enum: ["QCM", "QRM"] },
-      text: { type: "string" },
-      choices: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            label: { type: "string", enum: ["A", "B", "C", "D", "E"] },
-            text: { type: "string" },
-          },
-          required: ["label", "text"],
-        },
-        minItems: 5,
-        maxItems: 5,
-      },
-      correctAnswers: {
-        type: "array",
-        items: { type: "string", enum: ["A", "B", "C", "D", "E"] },
-        minItems: 1,
-      },
-      explanation: { type: "string" },
-      trap: { type: "string" },
-      source: { type: "string" },
-    },
-    required: [
-      "id",
-      "type",
-      "text",
-      "choices",
-      "correctAnswers",
-      "explanation",
-      "trap",
-      "source",
-    ],
-  };
 }
 
 function reviewQuestionsSchema() {
@@ -510,6 +360,17 @@ function validateInput({ userId, moduleId, provider }) {
   if (!userId) throw httpError(400, "Utilisateur manquant.");
   if (!moduleId) throw httpError(400, "Module obligatoire.");
   if (!provider) throw httpError(400, "Provider IA obligatoire.");
+}
+
+function normalizeReviewQuestionProvider(provider) {
+  const normalizedProvider = normalizeProvider(provider);
+  if (!REVIEW_QUESTION_PROVIDERS.includes(normalizedProvider)) {
+    throw httpError(
+      400,
+      "Questions generees par IA utilise seulement GroqCloud ou OpenRouter. Configurez une cle API pour l'un de ces providers."
+    );
+  }
+  return normalizedProvider;
 }
 
 function normalizeQuestionCount(value) {
