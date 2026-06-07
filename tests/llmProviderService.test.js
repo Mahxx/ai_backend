@@ -11,5 +11,5 @@ test("normalizeProvider maps claude to anthropic", () => {
 });
 
 test("defaultModel returns provider default", () => {
-  assert.equal(defaultModel("deepseek"), "deepseek-chat");
+  assert.equal(defaultModel("deepseek"), "deepseek-v4-flash");
 });

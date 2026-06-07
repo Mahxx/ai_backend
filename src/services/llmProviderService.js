@@ -9,12 +9,12 @@ const PROVIDER_DEFAULTS = {
   },
   deepseek: {
     label: "DeepSeek",
-    model: "deepseek-chat",
+    model: "deepseek-v4-flash",
     baseUrl: "https://api.deepseek.com",
   },
   grok: {
     label: "xAI Grok",
-    model: "grok-2-latest",
+    model: "grok-4.3",
     baseUrl: "https://api.x.ai/v1",
   },
   gemini: {
@@ -23,7 +23,7 @@ const PROVIDER_DEFAULTS = {
   },
   anthropic: {
     label: "Anthropic Claude",
-    model: "claude-3-5-sonnet-latest",
+    model: "claude-sonnet-4-20250514",
   },
 };
 
@@ -255,12 +255,41 @@ async function readJsonResponse(response, provider) {
       `Erreur provider ${provider}: HTTP ${response.status}`;
     throw httpError(
       response.status >= 500 ? 502 : response.status,
-      `Provider ${provider} indisponible ou cle invalide.`,
+      providerPublicMessage(provider, response.status, message),
       message
     );
   }
 
   return data;
+}
+
+function providerPublicMessage(provider, status, detail) {
+  const cleanProvider = providerLabel(provider);
+  const normalizedDetail = (detail || "").toLowerCase();
+
+  if (status === 401 || status === 403) {
+    return `${cleanProvider}: cle API invalide ou sans permission.`;
+  }
+  if (status === 404 || normalizedDetail.includes("model")) {
+    return `${cleanProvider}: modele IA introuvable ou non autorise pour cette cle.`;
+  }
+  if (
+    status === 429 ||
+    normalizedDetail.includes("quota") ||
+    normalizedDetail.includes("billing") ||
+    normalizedDetail.includes("credit") ||
+    normalizedDetail.includes("insufficient")
+  ) {
+    return `${cleanProvider}: quota depasse, limite atteinte ou compte sans credits API.`;
+  }
+  if (status >= 500) {
+    return `${cleanProvider}: service IA indisponible pour le moment.`;
+  }
+  return `${cleanProvider}: requete refusee. Verifiez la cle API et le modele.`;
+}
+
+function providerLabel(provider) {
+  return PROVIDER_DEFAULTS[normalizeProvider(provider)]?.label || provider;
 }
 
 module.exports = {
