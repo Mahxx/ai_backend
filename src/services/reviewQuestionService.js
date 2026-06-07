@@ -52,7 +52,7 @@ async function generateReviewQuestions({
     });
 
     countBackendUsage = true;
-    const answer = await sendMessage({
+    let answer = await sendMessage({
       provider: normalizedProvider,
       apiKey: key.apiKey,
       model: model || key.model,
@@ -68,7 +68,41 @@ async function generateReviewQuestions({
       responseMimeType: "application/json",
       responseJsonSchema: reviewQuestionsSchema(),
     });
-    const questions = parseGeneratedQuestions(answer, count);
+    let questions;
+    try {
+      questions = parseGeneratedQuestions(answer, count);
+    } catch (error) {
+      logInvalidGeneration({
+        error,
+        provider: normalizedProvider,
+        model: model || key.model,
+        answer,
+      });
+      if (normalizedProvider !== "gemini") {
+        throw error;
+      }
+
+      const retryCount = Math.min(count, 5);
+      answer = await sendMessage({
+        provider: normalizedProvider,
+        apiKey: key.apiKey,
+        model: model || key.model,
+        systemPrompt: getReviewQuestionsPrompt(),
+        userPrompt: `${buildReviewQuestionsUserPrompt({
+          studyYear,
+          moduleId,
+          questionCount: retryCount,
+          selectedChunks: courses.selectedChunks,
+        })}
+
+Important: la premiere generation n'etait pas parsable. Regenere maintenant un JSON compact, valide, sans markdown, avec ${retryCount} questions maximum.`,
+        context: courses.context,
+        maxTokens: 6000,
+        responseMimeType: "application/json",
+        responseJsonSchema: reviewQuestionsSchema(),
+      });
+      questions = parseGeneratedQuestions(answer, retryCount);
+    }
 
     success = true;
     return {
@@ -144,7 +178,7 @@ function reviewQuestionsSchema() {
 function parseGeneratedQuestions(answer, requestedCount) {
   let parsed;
   try {
-    parsed = JSON.parse(extractJson(answer));
+    parsed = parseJsonWithLightRepair(extractJson(answer));
   } catch (error) {
     throw httpError(
       502,
@@ -167,6 +201,16 @@ function parseGeneratedQuestions(answer, requestedCount) {
   }
 
   return questions;
+}
+
+function parseJsonWithLightRepair(text) {
+  const normalized = (text || "").trim().replace(/^\uFEFF/, "");
+  try {
+    return JSON.parse(normalized);
+  } catch (error) {
+    const repaired = normalized.replace(/,\s*([}\]])/g, "$1");
+    return JSON.parse(repaired);
+  }
 }
 
 function extractJson(text) {
@@ -253,6 +297,16 @@ function normalizeQuestionCount(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 10;
   return Math.min(20, Math.max(1, Math.floor(parsed)));
+}
+
+function logInvalidGeneration({ error, provider, model, answer }) {
+  console.warn("generated_questions_parse_failed", {
+    provider,
+    model,
+    message: error?.message,
+    answerLength: answer ? answer.length : 0,
+    answerPreview: answer ? answer.slice(0, 800) : "",
+  });
 }
 
 module.exports = { generateReviewQuestions };
