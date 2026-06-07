@@ -161,6 +161,7 @@ returns table(backend_id text, url text)
 language plpgsql
 security definer
 as $$
+#variable_conflict use_column
 declare
   v_backend backend_servers;
 begin
