@@ -7,21 +7,27 @@ async function selectBackend() {
   const { data, error } = await supabase.rpc("reserve_ai_backend");
 
   if (error) {
-    throw httpError(500, "Selection du backend impossible.", error.message);
+    console.warn("reserve_ai_backend failed, using current backend:", error.message);
+    return currentBackendFallback();
   }
 
   const row = Array.isArray(data) ? data[0] : data;
   if (!row?.backend_id || !row?.url) {
-    throw httpError(
-      503,
-      "Aucun serveur IA disponible pour le moment. Reessayez dans quelques instants."
-    );
+    return currentBackendFallback();
   }
 
   return {
     backendId: row.backend_id,
     url: row.url,
     reserved: true,
+  };
+}
+
+function currentBackendFallback() {
+  return {
+    backendId: "",
+    url: config.backendPublicUrl,
+    reserved: false,
   };
 }
 
