@@ -66,10 +66,12 @@ async function generateReviewQuestions({
       context: courses.context,
       maxTokens: Math.min(4096, Math.max(1400, count * 650)),
     });
+    const questions = parseGeneratedQuestions(answer, count);
 
     success = true;
     return {
       answer,
+      questions,
       provider: normalizedProvider,
       model: model || key.model,
       quota,
@@ -84,6 +86,86 @@ async function generateReviewQuestions({
       await releaseBackend(backendIdToRelease, success, countBackendUsage);
     }
   }
+}
+
+function parseGeneratedQuestions(answer, requestedCount) {
+  let parsed;
+  try {
+    parsed = JSON.parse(extractJson(answer));
+  } catch (error) {
+    throw httpError(
+      502,
+      "Generation IA invalide. Reessayez avec le meme provider ou un autre provider.",
+      error.message
+    );
+  }
+
+  const rawQuestions = Array.isArray(parsed?.questions) ? parsed.questions : [];
+  const questions = rawQuestions
+    .map((item, index) => normalizeQuestion(item, index))
+    .filter(Boolean)
+    .slice(0, requestedCount);
+
+  if (questions.length === 0) {
+    throw httpError(
+      502,
+      "Aucune question structuree n'a ete generee. Reessayez."
+    );
+  }
+
+  return questions;
+}
+
+function extractJson(text) {
+  const trimmed = (text || "").trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) return trimmed;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+  return trimmed;
+}
+
+function normalizeQuestion(item, index) {
+  const labels = ["A", "B", "C", "D", "E"];
+  const text = String(item?.text || "").trim();
+  if (!text) return null;
+
+  const choices = Array.isArray(item?.choices)
+    ? item.choices
+        .map((choice) => ({
+          label: String(choice?.label || "").trim().toUpperCase(),
+          text: String(choice?.text || "").trim(),
+        }))
+        .filter((choice) => labels.includes(choice.label) && choice.text)
+    : [];
+
+  const uniqueChoices = labels
+    .map((label) => choices.find((choice) => choice.label === label))
+    .filter(Boolean);
+  if (uniqueChoices.length !== 5) return null;
+
+  const correctAnswers = Array.isArray(item?.correctAnswers)
+    ? item.correctAnswers
+        .map((label) => String(label).trim().toUpperCase())
+        .filter((label) => labels.includes(label))
+    : [];
+  const uniqueCorrectAnswers = [...new Set(correctAnswers)];
+  if (uniqueCorrectAnswers.length === 0) return null;
+
+  return {
+    id: String(item?.id || `q${index + 1}`),
+    type: uniqueCorrectAnswers.length > 1 ? "QRM" : "QCM",
+    text,
+    choices: uniqueChoices,
+    correctAnswers: uniqueCorrectAnswers,
+    explanation: String(item?.explanation || "").trim(),
+    trap: String(item?.trap || "").trim(),
+    source: String(item?.source || "").trim(),
+  };
 }
 
 function validateInput({ userId, moduleId, provider }) {

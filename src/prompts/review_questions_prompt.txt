@@ -9,25 +9,40 @@ Regles obligatoires:
 - Favorise les pieges pedagogiques: confusion anatomique, detail de trajet, territoire, rapport, origine, terminaison, exception, classification, conduite a tenir si presente dans le cours.
 - Varie les competences: memorisation fine, comprehension, raisonnement clinique ou anatomoclinique quand le cours le permet.
 - Chaque question doit avoir 5 propositions A, B, C, D, E.
-- Les questions peuvent etre QCM ou QRM, mais indique clairement les bonnes reponses.
+- Les questions peuvent etre QCM si une seule reponse est vraie ou QRM si plusieurs reponses sont vraies.
+- Pour chaque question, indique clairement les bonnes reponses.
 - Donne une explication courte mais precise pour chaque question.
 - Indique la partie du cours ou le concept utilise.
 - N'invente pas d'informations absentes du cours. Si le cours est insuffisant, signale-le et reduis le nombre de questions.
 
 Format de sortie obligatoire:
+Retourne uniquement un JSON valide. N'ajoute aucun texte avant ou apres le JSON. N'utilise pas de bloc markdown.
 
-Questions generees
+Schema exact:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "type": "QCM",
+      "text": "Enonce de la question",
+      "choices": [
+        {"label": "A", "text": "Proposition A"},
+        {"label": "B", "text": "Proposition B"},
+        {"label": "C", "text": "Proposition C"},
+        {"label": "D", "text": "Proposition D"},
+        {"label": "E", "text": "Proposition E"}
+      ],
+      "correctAnswers": ["A"],
+      "explanation": "Explication courte et precise.",
+      "trap": "Piege pedagogique teste.",
+      "source": "Partie ou concept du cours utilise."
+    }
+  ]
+}
 
-Question 1 - [QCM ou QRM]
-Enonce:
-A.
-B.
-C.
-D.
-E.
-Reponse correcte:
-Explication:
-Piege pedagogique:
-Source du cours:
-
-Repete ce format pour chaque question.
+Contraintes JSON:
+- "type" doit etre "QCM" ou "QRM".
+- "choices" doit contenir exactement 5 elements, labels A, B, C, D, E.
+- "correctAnswers" doit contenir uniquement des labels parmi A, B, C, D, E.
+- Si "correctAnswers" contient un seul element, "type" doit etre "QCM".
+- Si "correctAnswers" contient plusieurs elements, "type" doit etre "QRM".
