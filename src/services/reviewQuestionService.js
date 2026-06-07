@@ -82,26 +82,15 @@ async function generateReviewQuestions({
         throw error;
       }
 
-      const retryCount = Math.min(count, 5);
-      answer = await sendMessage({
-        provider: normalizedProvider,
+      questions = await generateGeminiQuestionsOneByOne({
         apiKey: key.apiKey,
         model: model || key.model,
-        systemPrompt: getReviewQuestionsPrompt(),
-        userPrompt: `${buildReviewQuestionsUserPrompt({
-          studyYear,
-          moduleId,
-          questionCount: retryCount,
-          selectedChunks: courses.selectedChunks,
-        })}
-
-Important: la premiere generation n'etait pas parsable. Regenere maintenant un JSON compact, valide, sans markdown, avec ${retryCount} questions maximum.`,
-        context: courses.context,
-        maxTokens: 6000,
-        responseMimeType: "application/json",
-        responseJsonSchema: reviewQuestionsSchema(),
+        studyYear,
+        moduleId,
+        courses,
+        count: Math.min(count, 5),
       });
-      questions = parseGeneratedQuestions(answer, retryCount);
+      answer = JSON.stringify({ questions });
     }
 
     success = true;
@@ -122,6 +111,146 @@ Important: la premiere generation n'etait pas parsable. Regenere maintenant un J
       await releaseBackend(backendIdToRelease, success, countBackendUsage);
     }
   }
+}
+
+async function generateGeminiQuestionsOneByOne({
+  apiKey,
+  model,
+  studyYear,
+  moduleId,
+  courses,
+  count,
+}) {
+  const questions = [];
+  for (let index = 0; index < count; index++) {
+    const answer = await sendMessage({
+      provider: "gemini",
+      apiKey,
+      model,
+      systemPrompt: getSingleQuestionPrompt(),
+      userPrompt: `${buildReviewQuestionsUserPrompt({
+        studyYear,
+        moduleId,
+        questionCount: 1,
+        selectedChunks: courses.selectedChunks,
+      })}
+
+Genere seulement la question numero ${index + 1}.
+Evite de repeter les questions precedentes.
+Retourne uniquement l'objet JSON d'une seule question, pas un tableau.`,
+      context: courses.context,
+      maxTokens: 2200,
+      responseMimeType: "application/json",
+      responseJsonSchema: singleQuestionSchema(),
+    });
+
+    try {
+      const question = parseSingleQuestion(answer, index);
+      questions.push(question);
+    } catch (error) {
+      logInvalidGeneration({
+        error,
+        provider: "gemini",
+        model,
+        answer,
+      });
+    }
+  }
+
+  if (questions.length === 0) {
+    throw httpError(
+      502,
+      "Generation IA invalide. Reessayez avec GroqCloud ou OpenRouter."
+    );
+  }
+
+  return questions;
+}
+
+function parseSingleQuestion(answer, index) {
+  const parsed = parseJsonWithLightRepair(extractJson(answer));
+  const rawQuestion = Array.isArray(parsed?.questions)
+    ? parsed.questions[0]
+    : parsed?.question || parsed;
+  const question = normalizeQuestion(rawQuestion, index);
+  if (!question) {
+    throw new Error("Question individuelle Gemini invalide.");
+  }
+  return question;
+}
+
+function getSingleQuestionPrompt() {
+  return `Tu es un expert en pedagogie medicale et en docimologie.
+
+Ta mission est de generer une seule question de revision tres difficile a partir du cours fourni.
+
+Regles:
+- Utilise uniquement les informations soutenues par le cours.
+- La question doit avoir exactement 5 propositions A, B, C, D, E.
+- Une seule bonne reponse donne un type "QCM".
+- Plusieurs bonnes reponses donnent un type "QRM".
+- L'explication doit etre courte: 1 a 2 phrases.
+- Retourne uniquement un JSON valide, sans markdown, sans texte avant ou apres.
+
+Schema:
+{
+  "id": "q1",
+  "type": "QCM",
+  "text": "Enonce",
+  "choices": [
+    {"label": "A", "text": "Proposition A"},
+    {"label": "B", "text": "Proposition B"},
+    {"label": "C", "text": "Proposition C"},
+    {"label": "D", "text": "Proposition D"},
+    {"label": "E", "text": "Proposition E"}
+  ],
+  "correctAnswers": ["A"],
+  "explanation": "Explication courte.",
+  "trap": "Piege teste.",
+  "source": "Concept du cours."
+}`;
+}
+
+function singleQuestionSchema() {
+  return {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      type: { type: "string", enum: ["QCM", "QRM"] },
+      text: { type: "string" },
+      choices: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            label: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+            text: { type: "string" },
+          },
+          required: ["label", "text"],
+        },
+        minItems: 5,
+        maxItems: 5,
+      },
+      correctAnswers: {
+        type: "array",
+        items: { type: "string", enum: ["A", "B", "C", "D", "E"] },
+        minItems: 1,
+      },
+      explanation: { type: "string" },
+      trap: { type: "string" },
+      source: { type: "string" },
+    },
+    required: [
+      "id",
+      "type",
+      "text",
+      "choices",
+      "correctAnswers",
+      "explanation",
+      "trap",
+      "source",
+    ],
+  };
 }
 
 function reviewQuestionsSchema() {
