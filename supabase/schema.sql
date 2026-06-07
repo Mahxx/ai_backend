@@ -135,21 +135,21 @@ begin
   values (p_user_id, current_date, 0, p_daily_limit, now())
   on conflict(user_id, day) do nothing;
 
-  update user_daily_usage
-  set used = used + 1,
+  update user_daily_usage u
+  set used = u.used + 1,
       daily_limit = p_daily_limit,
       last_request_at = now()
-  where user_id = p_user_id
-    and day = current_date
-    and used < p_daily_limit
-  returning * into v_row;
+  where u.user_id = p_user_id
+    and u.day = current_date
+    and u.used < p_daily_limit
+  returning u.* into v_row;
 
   if found then
     return query select true, v_row.used, v_row.daily_limit;
   else
-    select * into v_row
-    from user_daily_usage
-    where user_id = p_user_id and day = current_date;
+    select u.* into v_row
+    from user_daily_usage u
+    where u.user_id = p_user_id and u.day = current_date;
 
     return query select false, coalesce(v_row.used, 0), p_daily_limit;
   end if;
@@ -165,10 +165,10 @@ declare
   v_backend backend_servers;
 begin
   insert into backend_daily_usage(backend_id, day, used, success, failed, "limit")
-  select id, current_date, 0, 0, 0, daily_limit
-  from backend_servers
-  where enabled = true
-  on conflict(backend_id, day) do nothing;
+  select bs.id, current_date, 0, 0, 0, bs.daily_limit
+  from backend_servers bs
+  where bs.enabled = true
+  on conflict on constraint backend_daily_usage_backend_id_day_key do nothing;
 
   select bs.* into v_backend
   from backend_servers bs
@@ -189,10 +189,10 @@ begin
     return;
   end if;
 
-  update backend_servers
-  set current_concurrent = current_concurrent + 1,
+  update backend_servers bs
+  set current_concurrent = bs.current_concurrent + 1,
       updated_at = now()
-  where id = v_backend.id;
+  where bs.id = v_backend.id;
 
   return query select v_backend.id, v_backend.url;
 end;
@@ -208,10 +208,10 @@ language plpgsql
 security definer
 as $$
 begin
-  update backend_servers
-  set current_concurrent = greatest(current_concurrent - 1, 0),
+  update backend_servers bs
+  set current_concurrent = greatest(bs.current_concurrent - 1, 0),
       updated_at = now()
-  where id = p_backend_id;
+  where bs.id = p_backend_id;
 
   if p_count_usage then
     insert into backend_daily_usage(backend_id, day, used, success, failed, "limit")
@@ -221,9 +221,9 @@ begin
       1,
       case when p_success then 1 else 0 end,
       case when p_success then 0 else 1 end,
-      coalesce((select daily_limit from backend_servers where id = p_backend_id), 1000)
+      coalesce((select bs.daily_limit from backend_servers bs where bs.id = p_backend_id), 1000)
     )
-    on conflict(backend_id, day) do update
+    on conflict on constraint backend_daily_usage_backend_id_day_key do update
     set used = backend_daily_usage.used + 1,
         success = backend_daily_usage.success + case when p_success then 1 else 0 end,
         failed = backend_daily_usage.failed + case when p_success then 0 else 1 end,
