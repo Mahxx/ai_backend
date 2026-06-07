@@ -133,7 +133,7 @@ async function callOpenAICompatible({ provider, apiKey, baseUrl, model, prompt }
 
 async function callGemini(prompt) {
   const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL || "gemini-1.5-flash";
+  const model = process.env.GEMINI_MODEL || "gemini-3.5-flash";
   if (!apiKey) {
     throw missingProviderError("gemini", "Cle API Gemini manquante.");
   }

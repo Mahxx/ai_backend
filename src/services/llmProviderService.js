@@ -29,7 +29,7 @@ const PROVIDER_DEFAULTS = {
   },
   gemini: {
     label: "Google Gemini",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash",
   },
   anthropic: {
     label: "Anthropic Claude",
