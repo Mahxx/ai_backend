@@ -17,6 +17,16 @@ const PROVIDER_DEFAULTS = {
     model: "grok-4.3",
     baseUrl: "https://api.x.ai/v1",
   },
+  groqcloud: {
+    label: "GroqCloud",
+    model: "llama-3.3-70b-versatile",
+    baseUrl: "https://api.groq.com/openai/v1",
+  },
+  openrouter: {
+    label: "OpenRouter Free",
+    model: "openrouter/free",
+    baseUrl: "https://openrouter.ai/api/v1",
+  },
   gemini: {
     label: "Google Gemini",
     model: "gemini-2.5-flash",
@@ -30,6 +40,7 @@ const PROVIDER_DEFAULTS = {
 function normalizeProvider(provider) {
   const normalized = (provider || "").toString().trim().toLowerCase();
   if (normalized === "claude") return "anthropic";
+  if (normalized === "groq") return "groqcloud";
   return normalized;
 }
 
@@ -38,7 +49,8 @@ function defaultModel(provider) {
 }
 
 function enabledProviderIds() {
-  const configured = process.env.ENABLED_AI_PROVIDERS || "gemini";
+  const configured =
+    process.env.ENABLED_AI_PROVIDERS || "gemini,groqcloud,openrouter";
   return configured
     .split(",")
     .map((provider) => normalizeProvider(provider))
@@ -61,6 +73,8 @@ function providerLinks() {
     anthropic: "https://console.anthropic.com/settings/keys",
     gemini: "https://aistudio.google.com/app/apikey",
     grok: "https://console.x.ai/",
+    groqcloud: "https://console.groq.com/keys",
+    openrouter: "https://openrouter.ai/settings/keys",
     deepseek: "https://platform.deepseek.com/api_keys",
   };
 }
@@ -131,6 +145,28 @@ async function sendMessage({
         provider: normalizedProvider,
         apiKey,
         baseUrl: PROVIDER_DEFAULTS.grok.baseUrl,
+        model: selectedModel,
+        systemPrompt,
+        userPrompt,
+        context,
+        maxTokens,
+      });
+    case "groqcloud":
+      return callOpenAICompatible({
+        provider: normalizedProvider,
+        apiKey,
+        baseUrl: PROVIDER_DEFAULTS.groqcloud.baseUrl,
+        model: selectedModel,
+        systemPrompt,
+        userPrompt,
+        context,
+        maxTokens,
+      });
+    case "openrouter":
+      return callOpenAICompatible({
+        provider: normalizedProvider,
+        apiKey,
+        baseUrl: PROVIDER_DEFAULTS.openrouter.baseUrl,
         model: selectedModel,
         systemPrompt,
         userPrompt,

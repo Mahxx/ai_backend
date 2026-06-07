@@ -15,7 +15,7 @@ test("defaultModel returns provider default", () => {
   assert.equal(defaultModel("deepseek"), "deepseek-v4-flash");
 });
 
-test("enabledProviderIds defaults to Gemini only", () => {
+test("enabledProviderIds defaults to free-friendly providers", () => {
   delete process.env.ENABLED_AI_PROVIDERS;
-  assert.deepEqual(enabledProviderIds(), ["gemini"]);
+  assert.deepEqual(enabledProviderIds(), ["gemini", "groqcloud", "openrouter"]);
 });
