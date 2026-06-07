@@ -325,6 +325,7 @@ function normalizeQuestion(item, index) {
     : [];
   const uniqueCorrectAnswers = [...new Set(correctAnswers)];
   if (uniqueCorrectAnswers.length === 0) return null;
+  if (uniqueCorrectAnswers.length > 3) return null;
 
   return {
     id: String(item?.id || `q${index + 1}`),
@@ -376,7 +377,7 @@ function normalizeReviewQuestionProvider(provider) {
 function normalizeQuestionCount(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return 10;
-  return Math.min(20, Math.max(1, Math.floor(parsed)));
+  return Math.min(10, Math.max(1, Math.floor(parsed)));
 }
 
 function logInvalidGeneration({ error, provider, model, answer }) {

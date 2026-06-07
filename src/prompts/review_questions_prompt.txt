@@ -10,6 +10,8 @@ Regles obligatoires:
 - Varie les competences: memorisation fine, comprehension, raisonnement clinique ou anatomoclinique quand le cours le permet.
 - Chaque question doit avoir 5 propositions A, B, C, D, E.
 - Les questions peuvent etre QCM si une seule reponse est vraie ou QRM si plusieurs reponses sont vraies.
+- Melange obligatoirement les types: environ la moitie des questions doivent etre QCM avec une seule bonne reponse, et environ la moitie doivent etre QRM avec 2 ou 3 bonnes reponses.
+- Exemple: pour 10 questions, genere environ 5 QCM et 5 QRM. Pour 5 questions, genere au moins 2 QCM et 2 QRM.
 - Pour chaque question, indique clairement les bonnes reponses.
 - Donne une explication courte mais precise pour chaque question: 1 a 2 phrases maximum.
 - Indique la partie du cours ou le concept utilise en quelques mots.
@@ -48,3 +50,4 @@ Contraintes JSON:
 - "correctAnswers" doit contenir uniquement des labels parmi A, B, C, D, E.
 - Si "correctAnswers" contient un seul element, "type" doit etre "QCM".
 - Si "correctAnswers" contient plusieurs elements, "type" doit etre "QRM".
+- Les questions QRM doivent avoir 2 ou 3 bonnes reponses, pas 4 ou 5.
