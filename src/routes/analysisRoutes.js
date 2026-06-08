@@ -1,6 +1,7 @@
 const express = require("express");
 const { upload } = require("../services/uploadService");
 const { analyzeSubject } = require("../services/analysisService");
+const { askCourseChat } = require("../services/courseChatService");
 const { generateReviewQuestions } = require("../services/reviewQuestionService");
 
 const router = express.Router();
@@ -41,6 +42,28 @@ router.post("/generate-review-questions", async (req, res, next) => {
       studyYear: req.body.studyYear,
       moduleId: req.body.moduleId,
       questionCount: req.body.questionCount,
+      provider: req.body.provider,
+      model: req.body.model,
+      reservedBackendId: req.body.reservedBackendId,
+    });
+
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/course-chat", async (req, res, next) => {
+  try {
+    const result = await askCourseChat({
+      userId: req.body.userId,
+      email: req.body.email,
+      fullName: req.body.fullName,
+      studyYear: req.body.studyYear,
+      moduleId: req.body.moduleId,
+      courseIds: parseJsonArray(req.body.courseIds),
+      question: req.body.question,
+      history: parseJsonArray(req.body.history),
       provider: req.body.provider,
       model: req.body.model,
       reservedBackendId: req.body.reservedBackendId,

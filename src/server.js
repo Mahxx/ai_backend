@@ -6,6 +6,7 @@ const analysisRoutes = require("./routes/analysisRoutes");
 const aiKeyRoutes = require("./routes/aiKeyRoutes");
 const contentRoutes = require("./routes/contentRoutes");
 const pedagogicalAnalysisRoutes = require("./routes/pedagogicalAnalysisRoutes");
+const quotaRoutes = require("./routes/quotaRoutes");
 const routingRoutes = require("./routes/routingRoutes");
 const { getBackendHealth } = require("./services/routingService");
 
@@ -38,6 +39,7 @@ app.get("/health", async (req, res, next) => {
 app.use("/api", analysisRoutes);
 app.use("/api/ai-content", contentRoutes);
 app.use("/api/ai-key", aiKeyRoutes);
+app.use("/api/ai-quota", quotaRoutes);
 app.use("/api/routing", routingRoutes);
 app.use("/api/pedagogical-analysis", pedagogicalAnalysisRoutes);
 
